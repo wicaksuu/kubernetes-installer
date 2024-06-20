@@ -67,6 +67,9 @@ install_kubernetes_master() {
     if ! sudo kubeadm init --apiserver-advertise-address=$PUBLIC_IP --pod-network-cidr=10.244.0.0/16; then
         echo "Retrying kubeadm init to address CoreDNS issue..."
         sleep 10
+        cleanup_kubernetes_manifests  # Bersihkan file-file manifests Kubernetes yang ada
+        cleanup_etcd_directory  # Bersihkan /var/lib/etcd jika tidak kosong
+        check_port_availability  # Periksa ketersediaan port sebelum inisialisasi ulang
         sudo kubeadm init --apiserver-advertise-address=$PUBLIC_IP --pod-network-cidr=10.244.0.0/16 || { echo "Failed to initialize Kubernetes cluster after retry. Exiting."; exit 1; }
     fi
 
