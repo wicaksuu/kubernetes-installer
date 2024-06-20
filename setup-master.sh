@@ -88,13 +88,13 @@ install_kubernetes_master() {
             "type": "NodePort",
             "ports": [
                 {
-                    "name": "http",  # Nama port yang diperlukan
+                    "name": "http",
                     "port": 80,
                     "targetPort": 8443,
                     "nodePort": 30000
                 },
                 {
-                    "name": "https",  # Nama port tambahan yang diperlukan
+                    "name": "https",
                     "port": 443,
                     "targetPort": 8443,
                     "nodePort": 30001
