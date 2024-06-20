@@ -12,8 +12,25 @@ handle_error() {
 # Trap errors and call handle_error
 trap 'handle_error $LINENO' ERR
 
-# Stop services using port 10259, 2379, 2380, 6443, and 10257
-sudo lsof -ti:10259,2379,2380,6443,10257 | xargs -r sudo kill
+# Check if the script is running on Ubuntu
+if [[ "$(lsb_release -is)" != "Ubuntu" ]]; then
+  echo "This script is intended to be run on Ubuntu only."
+  exit 1
+fi
+
+# Get the hostname and use it as the username
+USER=$(hostname)
+
+# Ports that need to be checked and cleared
+PORTS=(10259 2379 2380 6443 10257)
+
+# Stop services using the specified ports
+for PORT in "${PORTS[@]}"; do
+  if sudo lsof -ti:$PORT; then
+    echo "Stopping service on port $PORT"
+    sudo lsof -ti:$PORT | xargs -r sudo kill
+  fi
+done
 
 # Remove any old versions of Docker
 sudo apt-get remove -y docker docker-engine docker.io containerd runc
@@ -28,10 +45,10 @@ sudo rm -rf /etc/docker /var/lib/docker
 sudo rm -rf /etc/kubernetes /var/lib/kubernetes
 
 # Remove etcd data
-# ada error hapus disini
 sudo rm -rf /var/lib/etcd/*
 
 # Install Docker dependencies
+sudo apt-get update
 sudo apt-get install -y \
     apt-transport-https \
     ca-certificates \
@@ -60,6 +77,7 @@ sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 # Install Kubernetes components
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 sudo apt-get update
 sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
@@ -73,22 +91,25 @@ initialize_kubernetes_master() {
   # Get the public IP address
   PUBLIC_IP=$(curl -s ifconfig.me)
 
+  # Ensure hostname is resolvable
+  echo "$PUBLIC_IP $USER" | sudo tee -a /etc/hosts
+
   # Initialize Kubernetes master with public IP
   sudo kubeadm init --apiserver-advertise-address=$PUBLIC_IP --pod-network-cidr=192.168.0.0/16
 
   # Configure kubectl for the non-root user
-  mkdir -p $HOME/.kube
-  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+  mkdir -p /home/$USER/.kube
+  sudo cp -i /etc/kubernetes/admin.conf /home/$USER/.kube/config
+  sudo chown $USER:$USER /home/$USER/.kube/config
 
   # Deploy Weave Net pod network
-  kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+  sudo -u $USER kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(sudo -u $USER kubectl version | base64 | tr -d '\n')"
 
   # Install Kubernetes Dashboard
-  kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.3.1/aio/deploy/recommended.yaml
+  sudo -u $USER kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.3.1/aio/deploy/recommended.yaml
 
   # Create admin user for Kubernetes Dashboard
-  cat <<EOF | kubectl apply -f -
+  cat <<EOF | sudo -u $USER kubectl apply -f -
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -117,27 +138,27 @@ for attempt in {1..3}; do
 
   echo "Waiting for the node to be ready..."
   for i in {1..20}; do
-    NODE_STATUS=$(kubectl get nodes wicaksu --no-headers -o custom-columns=STATUS:.status.conditions[?(@.type=="Ready")].status 2>/dev/null || echo "NotFound")
+    NODE_STATUS=$(sudo -u $USER kubectl get nodes --no-headers -o custom-columns=STATUS:.status.conditions[?(@.type=="Ready")].status 2>/dev/null || echo "NotFound")
     echo "Current node status: $NODE_STATUS"
     if [[ $NODE_STATUS == "True" ]]; then
-      echo "Node 'wicaksu' is ready."
+      echo "Node is ready."
       break 2
     elif [[ $i -eq 20 ]]; then
-      echo "Node 'wicaksu' did not become ready in time."
-      kubectl get nodes
+      echo "Node did not become ready in time."
+      sudo -u $USER kubectl get nodes
       if [[ $attempt -eq 3 ]]; then
         echo "Node failed to become ready after 3 attempts."
         exit 1
       fi
     else
-      echo "Node 'wicaksu' is not yet ready, waiting for 10 seconds..."
+      echo "Node is not yet ready, waiting for 10 seconds..."
       sleep 10
     fi
   done
 done
 
 # Generate join command for worker nodes
-JOIN_COMMAND=$(kubeadm token create --print-join-command)
+JOIN_COMMAND=$(sudo kubeadm token create --print-join-command)
 
 # Create worker setup script
 cat <<EOF > setup-worker.sh
@@ -172,8 +193,8 @@ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o 
 
 # Set up the Docker stable repository
 echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+  "deb [arch=\$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+  \$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 # Install Docker Engine
 sudo apt-get update
@@ -187,6 +208,7 @@ sudo systemctl start docker
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 # Install Kubernetes components
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 sudo apt-get update
 sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
@@ -210,4 +232,4 @@ echo "Kubernetes Dashboard installed."
 echo "To access the Kubernetes Dashboard, run 'kubectl proxy' and visit:"
 echo "http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/"
 echo "Use the following token to log in:"
-kubectl -n kubernetes-dashboard create token admin-user
+sudo -u $USER kubectl -n kubernetes-dashboard create token admin-user
