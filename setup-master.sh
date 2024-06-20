@@ -30,7 +30,7 @@ cleanup_kubernetes() {
     sudo systemctl stop docker
 
     # Hapus semua paket Kubernetes
-    sudo apt-get purge -y kubeadm kubelet kubectl kubernetes-cni kube* docker.io
+    sudo apt-get purge -y kubeadm kubelet kubectl kubernetes-cni kube* docker.io || true
 
     # Hapus konfigurasi Kubernetes dan direktori lainnya
     sudo rm -rf ~/.kube /etc/kubernetes /var/lib/dockershim /var/lib/cni /var/lib/kubelet /var/log/containers /var/log/pods
