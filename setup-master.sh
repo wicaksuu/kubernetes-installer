@@ -82,14 +82,14 @@ install_kubernetes_master() {
     kubectl create serviceaccount dashboard-admin-sa || { echo "Failed to create Dashboard ServiceAccount. Exiting."; exit 1; }
     kubectl create clusterrolebinding dashboard-admin-sa --clusterrole=cluster-admin --serviceaccount=default:dashboard-admin-sa || { echo "Failed to create Dashboard ClusterRoleBinding. Exiting."; exit 1; }
 
-    # Ubah Service Kubernetes Dashboard ke NodePort
-    kubectl patch service kubernetes-dashboard -n kubernetes-dashboard -p '{"spec": {"type": "NodePort"}}'
-    kubectl patch service kubernetes-dashboard -n kubernetes-dashboard -p '{"spec": {"ports": [{"port": 443, "targetPort": 8443, "nodePort": 30000}]}}'
+    # Ubah Service Kubernetes Dashboard ke NodePort dengan HTTP
+    kubectl patch service kubernetes-dashboard -n kubernetes-dashboard -p '{"spec": {"type": "NodePort", "ports": [{"port": 80, "targetPort": 8443, "nodePort": 30000}]}}'
 
     echo "Kubernetes master installation completed successfully."
     save_dashboard_token
     create_worker_join_script
     create_summary_file
+    check_dashboard_status
     echo "Rekapitulasi telah disimpan di data.txt"
 }
 
@@ -108,7 +108,7 @@ save_dashboard_token() {
     kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep dashboard-admin-sa-token | awk '{print $1}') >> data.txt || { echo "Failed to get Dashboard token. Exiting."; exit 1; }
     echo "" >> data.txt
     echo "To access Kubernetes Dashboard, open the following URL in your browser:" >> data.txt
-    echo "https://$PUBLIC_IP:30000" >> data.txt
+    echo "http://$PUBLIC_IP:30000" >> data.txt
 }
 
 # Fungsi untuk membuat file bash untuk worker node
@@ -142,13 +142,20 @@ create_summary_file() {
     echo "Public IP Address: $PUBLIC_IP" >> data.txt
     echo "" >> data.txt
     echo "Kubernetes Dashboard URL:" >> data.txt
-    echo "https://$PUBLIC_IP:30000" >> data.txt
+    echo "http://$PUBLIC_IP:30000" >> data.txt
     echo "" >> data.txt
     echo "Run the following command to start the proxy:" >> data.txt
     echo "kubectl proxy --address=0.0.0.0 --accept-hosts='^.*$' &" >> data.txt
     echo "" >> data.txt
     echo "Worker node join script command:" >> data.txt
     echo "$(cat join-worker.sh)" >> data.txt
+}
+
+# Fungsi untuk memeriksa status Kubernetes Dashboard
+check_dashboard_status() {
+    echo "Checking Kubernetes Dashboard status..."
+    kubectl wait --namespace kubernetes-dashboard --for=condition=ready pod --selector=k8s-app=kubernetes-dashboard --timeout=120s || { echo "Kubernetes Dashboard failed to become ready. Exiting."; exit 1; }
+    echo "Kubernetes Dashboard is ready and accessible."
 }
 
 # Main script
