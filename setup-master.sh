@@ -76,11 +76,10 @@ install_kubernetes_master() {
     kubectl create clusterrolebinding dashboard-admin-sa --clusterrole=cluster-admin --serviceaccount=default:dashboard-admin-sa || { echo "Failed to create Dashboard ClusterRoleBinding. Exiting."; exit 1; }
 
     echo "Kubernetes master installation completed successfully."
-    echo "Save the following token for Kubernetes Dashboard access:"
-    kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep dashboard-admin-sa-token | awk '{print $1}') || { echo "Failed to get Dashboard token. Exiting."; exit 1; }
-
-    echo "To access Kubernetes Dashboard, run the following command in your terminal:"
-    echo "kubectl proxy --address=0.0.0.0 --accept-hosts='^.*$' &"
+    save_dashboard_token
+    create_worker_join_script
+    create_summary_file
+    echo "Rekapitulasi telah disimpan di data.txt"
 }
 
 # Fungsi untuk mengonfigurasi kubectl untuk pengguna non-root
@@ -90,6 +89,17 @@ configure_kubectl_for_non_root() {
     mkdir -p $HOME/.kube || { echo "Failed to create .kube directory. Exiting."; exit 1; }
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config || { echo "Failed to copy Kubernetes config file. Exiting."; exit 1; }
     sudo chown $(id -u):$(id -g) $HOME/.kube/config || { echo "Failed to change ownership of Kubernetes config file. Exiting."; exit 1; }
+}
+
+# Fungsi untuk menyimpan token dashboard ke file data.txt
+save_dashboard_token() {
+    echo "Save the following token for Kubernetes Dashboard access:" > data.txt
+    kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep dashboard-admin-sa-token | awk '{print $1}') >> data.txt || { echo "Failed to get Dashboard token. Exiting."; exit 1; }
+    echo "" >> data.txt
+    echo "To access Kubernetes Dashboard, run the following command in your terminal:" >> data.txt
+    echo "kubectl proxy --address=0.0.0.0 --accept-hosts='^.*$' &" >> data.txt
+    echo "Then open the following URL in your browser:" >> data.txt
+    echo "http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/" >> data.txt
 }
 
 # Fungsi untuk membuat file bash untuk worker node
@@ -111,6 +121,25 @@ create_worker_join_script() {
     echo "$join_command" >> join-worker.sh
     chmod +x join-worker.sh
     echo "Worker node join script created: join-worker.sh"
+    echo "" >> data.txt
+    echo "Worker node join script:" >> data.txt
+    echo "$join_command" >> data.txt
+}
+
+# Fungsi untuk membuat file rekapitulasi
+create_summary_file() {
+    echo "Kubernetes installation completed successfully." >> data.txt
+    echo "Summary of important information:" >> data.txt
+    echo "Public IP Address: $PUBLIC_IP" >> data.txt
+    echo "" >> data.txt
+    echo "Kubernetes Dashboard URL:" >> data.txt
+    echo "http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/" >> data.txt
+    echo "" >> data.txt
+    echo "Run the following command to start the proxy:" >> data.txt
+    echo "kubectl proxy --address=0.0.0.0 --accept-hosts='^.*$' &" >> data.txt
+    echo "" >> data.txt
+    echo "Worker node join script command:" >> data.txt
+    echo "$(cat join-worker.sh)" >> data.txt
 }
 
 # Main script
@@ -120,11 +149,5 @@ cleanup_kubernetes_manifests  # Bersihkan file-file manifests Kubernetes yang ad
 get_public_ip  # Dapatkan IP publik dari sistem
 
 install_kubernetes_master  # Install Kubernetes di master node
-
-# Deploy pod network
-kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.24.0/manifests/calico.yaml
-
-# Buat file bash untuk worker node
-create_worker_join_script
 
 echo "Kubernetes installation completed successfully."
