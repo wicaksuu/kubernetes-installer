@@ -64,10 +64,8 @@ install_kubernetes_master() {
     echo "Installing Kubernetes on master node..."
 
     # Tambahkan repository Kubernetes
-    sudo apt-get update
-    sudo apt-get install -y apt-transport-https curl
-    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
-    echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
     # Install paket Kubernetes
     sudo apt-get update
@@ -81,7 +79,7 @@ install_kubernetes_master() {
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
     sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
-    # Tambahkan Calico sebagai network plugin
+    # Instalasi Calico sebagai plugin jaringan untuk Kubernetes
     kubectl apply -f https://docs.projectcalico.org/v3.14/manifests/calico.yaml
 
     # Instalasi Kubernetes Dashboard
