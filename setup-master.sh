@@ -70,7 +70,7 @@ install_kubernetes_master() {
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config || { echo "Failed to copy Kubernetes config file. Exiting."; exit 1; }
     sudo chown $(id -u):$(id -g) $HOME/.kube/config || { echo "Failed to change ownership of Kubernetes config file. Exiting."; exit 1; }
 
-    kubectl apply -f https://docs.projectcalico.org/v3.14/manifests/calico.yaml || { echo "Failed to apply Calico network plugin. Exiting."; exit 1; }
+    kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.24.0/manifests/calico.yaml || { echo "Failed to apply Calico network plugin. Exiting."; exit 1; }
 
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.4.0/aio/deploy/recommended.yaml || { echo "Failed to apply Kubernetes Dashboard. Exiting."; exit 1; }
 
