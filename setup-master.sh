@@ -83,14 +83,8 @@ install_kubernetes_master() {
     kubectl create clusterrolebinding dashboard-admin-sa --clusterrole=cluster-admin --serviceaccount=default:dashboard-admin-sa || { echo "Failed to create Dashboard ClusterRoleBinding. Exiting."; exit 1; }
 
     # Ubah Service Kubernetes Dashboard ke NodePort
-    kubectl -n kubernetes-dashboard edit service kubernetes-dashboard <<EOF
-spec:
-  type: NodePort
-  ports:
-    - port: 443
-      targetPort: 8443
-      nodePort: 30000
-EOF
+    kubectl patch service kubernetes-dashboard -n kubernetes-dashboard -p '{"spec": {"type": "NodePort"}}'
+    kubectl patch service kubernetes-dashboard -n kubernetes-dashboard -p '{"spec": {"ports": [{"port": 443, "targetPort": 8443, "nodePort": 30000}]}}'
 
     echo "Kubernetes master installation completed successfully."
     save_dashboard_token
