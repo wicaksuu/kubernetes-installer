@@ -4,7 +4,7 @@ set -e  # Memastikan script berhenti jika ada kesalahan
 
 # Fungsi untuk mengecek port yang sedang digunakan dan menghentikan proses yang menggunakan port itu
 check_port_availability() {
-    local ports=(6443 2379 2380 10250 10251 10252 10255)
+    local ports=(6443 2379 2380 10250 10251 10252 10255 10257 10259)
 
     echo "Checking port availability..."
 
@@ -31,10 +31,21 @@ cleanup_etcd_directory() {
     fi
 }
 
+# Fungsi untuk membersihkan file-file Kubernetes yang sudah ada
+cleanup_kubernetes_manifests() {
+    local manifests_dir="/etc/kubernetes/manifests"
+
+    echo "Cleaning up $manifests_dir..."
+
+    # Hapus file-file manifests Kubernetes yang ada
+    sudo rm -f $manifests_dir/kube-apiserver.yaml
+    sudo rm -f $manifests_dir/kube-controller-manager.yaml
+    sudo rm -f $manifests_dir/kube-scheduler.yaml
+    sudo rm -f $manifests_dir/etcd.yaml
+}
+
 # Fungsi untuk mendapatkan IP publik dari sistem
 get_public_ip() {
-    # Menggunakan layanan eksternal untuk mendapatkan IP publik
-    # Misalnya, menggunakan ifconfig.me
     public_ip=$(curl -s ifconfig.me/ip)
     echo "Detected public IP address: $public_ip"
     export PUBLIC_IP=$public_ip
@@ -44,42 +55,32 @@ get_public_ip() {
 install_kubernetes_master() {
     echo "Installing Kubernetes on master node..."
 
-    # Tambahkan repository Kubernetes jika belum ada
     if [ ! -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg ]; then
         curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg || { echo "Failed to add Kubernetes repository key. Exiting."; exit 1; }
         echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list || { echo "Failed to add Kubernetes repository to sources list. Exiting."; exit 1; }
     fi
 
-    # Pastikan untuk mengupdate package list sebelum instalasi
     sudo apt-get update || { echo "Failed to update package list. Exiting."; exit 1; }
 
-    # Install kubeadm, kubelet, kubectl jika belum terpasang
     sudo apt-get install -y kubeadm kubelet kubectl || { echo "Failed to install Kubernetes components. Exiting."; exit 1; }
 
-    # Inisialisasi cluster Kubernetes
     sudo kubeadm init --apiserver-advertise-address=$PUBLIC_IP --pod-network-cidr=10.244.0.0/16 || { echo "Failed to initialize Kubernetes cluster. Exiting."; exit 1; }
 
-    # Setelah berhasil, atur konfigurasi kubectl untuk pengguna non-root
     mkdir -p $HOME/.kube || { echo "Failed to create .kube directory. Exiting."; exit 1; }
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config || { echo "Failed to copy Kubernetes config file. Exiting."; exit 1; }
     sudo chown $(id -u):$(id -g) $HOME/.kube/config || { echo "Failed to change ownership of Kubernetes config file. Exiting."; exit 1; }
 
-    # Instalasi Calico sebagai plugin jaringan untuk Kubernetes
     kubectl apply -f https://docs.projectcalico.org/v3.14/manifests/calico.yaml || { echo "Failed to apply Calico network plugin. Exiting."; exit 1; }
 
-    # Instalasi Kubernetes Dashboard
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.4.0/aio/deploy/recommended.yaml || { echo "Failed to apply Kubernetes Dashboard. Exiting."; exit 1; }
 
-    # Membuat ServiceAccount dan ClusterRoleBinding untuk Dashboard
     kubectl create serviceaccount dashboard-admin-sa || { echo "Failed to create Dashboard ServiceAccount. Exiting."; exit 1; }
     kubectl create clusterrolebinding dashboard-admin-sa --clusterrole=cluster-admin --serviceaccount=default:dashboard-admin-sa || { echo "Failed to create Dashboard ClusterRoleBinding. Exiting."; exit 1; }
 
-    # Tampilkan token untuk login ke Dashboard
     echo "Kubernetes master installation completed successfully."
     echo "Save the following token for Kubernetes Dashboard access:"
     kubectl -n kube-system describe secret $(kubectl -n kube-system get secret | grep dashboard-admin-sa-token | awk '{print $1}') || { echo "Failed to get Dashboard token. Exiting."; exit 1; }
 
-    # Tampilkan perintah untuk proxy kubectl
     echo "To access Kubernetes Dashboard, run the following command in your terminal:"
     echo "kubectl proxy --address=0.0.0.0 --accept-hosts='^.*$' &"
 }
@@ -87,9 +88,9 @@ install_kubernetes_master() {
 # Main script
 cleanup_etcd_directory  # Bersihkan /var/lib/etcd jika tidak kosong
 check_port_availability  # Periksa ketersediaan port sebelum instalasi
+cleanup_kubernetes_manifests  # Bersihkan file-file manifests Kubernetes yang ada
 get_public_ip  # Dapatkan IP publik dari sistem
 
-# Install Kubernetes di master node
-install_kubernetes_master
+install_kubernetes_master  # Install Kubernetes di master node
 
 echo "Kubernetes installation completed successfully."
