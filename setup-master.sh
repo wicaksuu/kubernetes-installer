@@ -64,7 +64,11 @@ install_kubernetes_master() {
 
     sudo apt-get install -y kubeadm kubelet kubectl || { echo "Failed to install Kubernetes components. Exiting."; exit 1; }
 
-    sudo kubeadm init --apiserver-advertise-address=$PUBLIC_IP --pod-network-cidr=10.244.0.0/16 || { echo "Failed to initialize Kubernetes cluster. Exiting."; exit 1; }
+    if ! sudo kubeadm init --apiserver-advertise-address=$PUBLIC_IP --pod-network-cidr=10.244.0.0/16; then
+        echo "Retrying kubeadm init to address CoreDNS issue..."
+        sleep 10
+        sudo kubeadm init --apiserver-advertise-address=$PUBLIC_IP --pod-network-cidr=10.244.0.0/16 || { echo "Failed to initialize Kubernetes cluster after retry. Exiting."; exit 1; }
+    fi
 
     configure_kubectl_for_non_root
 
