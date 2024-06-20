@@ -66,9 +66,7 @@ install_kubernetes_master() {
 
     sudo kubeadm init --apiserver-advertise-address=$PUBLIC_IP --pod-network-cidr=10.244.0.0/16 || { echo "Failed to initialize Kubernetes cluster. Exiting."; exit 1; }
 
-    mkdir -p $HOME/.kube || { echo "Failed to create .kube directory. Exiting."; exit 1; }
-    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config || { echo "Failed to copy Kubernetes config file. Exiting."; exit 1; }
-    sudo chown $(id -u):$(id -g) $HOME/.kube/config || { echo "Failed to change ownership of Kubernetes config file. Exiting."; exit 1; }
+    configure_kubectl_for_non_root
 
     kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.24.0/manifests/calico.yaml || { echo "Failed to apply Calico network plugin. Exiting."; exit 1; }
 
@@ -85,6 +83,36 @@ install_kubernetes_master() {
     echo "kubectl proxy --address=0.0.0.0 --accept-hosts='^.*$' &"
 }
 
+# Fungsi untuk mengonfigurasi kubectl untuk pengguna non-root
+configure_kubectl_for_non_root() {
+    echo "Configuring kubectl for non-root user..."
+
+    mkdir -p $HOME/.kube || { echo "Failed to create .kube directory. Exiting."; exit 1; }
+    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config || { echo "Failed to copy Kubernetes config file. Exiting."; exit 1; }
+    sudo chown $(id -u):$(id -g) $HOME/.kube/config || { echo "Failed to change ownership of Kubernetes config file. Exiting."; exit 1; }
+}
+
+# Fungsi untuk membuat file bash untuk worker node
+create_worker_join_script() {
+    join_command=$(kubeadm token create --print-join-command)
+    echo "#!/bin/bash" > join-worker.sh
+    echo "set -e" >> join-worker.sh
+    echo "check_port_availability() {" >> join-worker.sh
+    echo "  local ports=(6443 2379 2380 10250 10251 10252 10255 10257 10259)" >> join-worker.sh
+    echo "  echo 'Checking port availability...'" >> join-worker.sh
+    echo "  for port in \"\${ports[@]}\"; do" >> join-worker.sh
+    echo "    if sudo lsof -i:\$port -sTCP:LISTEN -t >/dev/null; then" >> join-worker.sh
+    echo "      echo 'Port \$port is already in use. Killing related process...'" >> join-worker.sh
+    echo "      sudo kill -9 \$(sudo lsof -t -i:\$port)" >> join-worker.sh
+    echo "    fi" >> join-worker.sh
+    echo "  done" >> join-worker.sh
+    echo "}" >> join-worker.sh
+    echo "check_port_availability" >> join-worker.sh
+    echo "$join_command" >> join-worker.sh
+    chmod +x join-worker.sh
+    echo "Worker node join script created: join-worker.sh"
+}
+
 # Main script
 cleanup_etcd_directory  # Bersihkan /var/lib/etcd jika tidak kosong
 check_port_availability  # Periksa ketersediaan port sebelum instalasi
@@ -92,5 +120,11 @@ cleanup_kubernetes_manifests  # Bersihkan file-file manifests Kubernetes yang ad
 get_public_ip  # Dapatkan IP publik dari sistem
 
 install_kubernetes_master  # Install Kubernetes di master node
+
+# Deploy pod network
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.24.0/manifests/calico.yaml
+
+# Buat file bash untuk worker node
+create_worker_join_script
 
 echo "Kubernetes installation completed successfully."
