@@ -44,8 +44,10 @@ check_port_availability() {
 
     for port in "${ports[@]}"; do
         if sudo lsof -i:$port -sTCP:LISTEN -t >/dev/null; then
-            echo "Port $port is already in use. Exiting."
-            exit 1
+            echo "Port $port is already in use. Killing related process..."
+
+            # Hentikan proses yang menggunakan port tertentu
+            sudo kill -9 $(sudo lsof -t -i:$port)
         fi
     done
 }
@@ -100,8 +102,8 @@ install_kubernetes_master() {
 }
 
 # Main script
-cleanup_kubernetes  # Bersihkan instalasi sebelumnya jika ada
 check_port_availability  # Periksa ketersediaan port sebelum instalasi
+cleanup_kubernetes  # Bersihkan instalasi sebelumnya jika ada
 get_public_ip  # Dapatkan IP publik dari sistem
 
 # Install Kubernetes di master node
