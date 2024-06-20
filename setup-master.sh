@@ -2,41 +2,7 @@
 
 set -e  # Memastikan script berhenti jika ada kesalahan
 
-# Fungsi untuk menunggu perintah sampai berhasil atau mencapai timeout
-wait_until_success() {
-    local cmd="$1"
-    local retries=5
-    local wait_seconds=10
-    local count=0
-
-    until $cmd || [ $count -eq $retries ]; do
-        echo "Waiting for the command to succeed..."
-        sleep $wait_seconds
-        ((count++))
-    done
-
-    if [ $count -eq $retries ]; then
-        echo "Command failed after $retries retries. Exiting."
-        exit 1
-    fi
-}
-
-# Fungsi untuk membersihkan instalasi Kubernetes sebelumnya
-cleanup_kubernetes() {
-    echo "Cleaning up previous Kubernetes installation..."
-
-    # Hentikan layanan Kubernetes yang berjalan jika ada
-    sudo systemctl stop kubelet || true  # Gunakan '|| true' untuk melanjutkan jika perintah gagal
-    sudo systemctl stop docker || true   # Gunakan '|| true' untuk melanjutkan jika perintah gagal
-
-    # Hapus semua paket Kubernetes
-    sudo apt-get purge -y kubeadm kubelet kubectl kubernetes-cni kube* docker.io || true  # Gunakan '|| true' untuk melanjutkan jika perintah gagal
-
-    # Hapus konfigurasi Kubernetes dan direktori lainnya
-    sudo rm -rf ~/.kube /etc/kubernetes /var/lib/dockershim /var/lib/cni /var/lib/kubelet /var/log/containers /var/log/pods || true  # Gunakan '|| true' untuk melanjutkan jika perintah gagal
-}
-
-# Fungsi untuk mengecek port yang sedang digunakan
+# Fungsi untuk mengecek port yang sedang digunakan dan menghentikan proses yang menggunakan port itu
 check_port_availability() {
     local ports=(6443 2379 2380 10250 10251 10252 10255)
 
@@ -45,11 +11,27 @@ check_port_availability() {
     for port in "${ports[@]}"; do
         if sudo lsof -i:$port -sTCP:LISTEN -t >/dev/null; then
             echo "Port $port is already in use. Killing related process..."
-
-            # Hentikan proses yang menggunakan port tertentu
             sudo kill -9 $(sudo lsof -t -i:$port)
         fi
     done
+}
+
+# Fungsi untuk membersihkan direktori /var/lib/etcd jika tidak kosong
+cleanup_etcd_directory() {
+    local etcd_dir="/var/lib/etcd"
+
+    echo "Cleaning up $etcd_dir..."
+
+    # Periksa apakah direktori kosong
+    if [ "$(ls -A $etcd_dir)" ]; then
+        echo "$etcd_dir is not empty. Stopping etcd service and clearing contents..."
+        
+        # Hentikan layanan etcd jika sedang berjalan
+        sudo systemctl stop etcd || true  # Gunakan '|| true' untuk melanjutkan jika perintah gagal
+        
+        # Hapus isi dari direktori etcd
+        sudo rm -rf $etcd_dir/* || { echo "Failed to clean up $etcd_dir. Exiting."; exit 1; }
+    fi
 }
 
 # Fungsi untuk mendapatkan IP publik dari sistem
@@ -102,8 +84,8 @@ install_kubernetes_master() {
 }
 
 # Main script
+cleanup_etcd_directory  # Bersihkan /var/lib/etcd jika tidak kosong
 check_port_availability  # Periksa ketersediaan port sebelum instalasi
-cleanup_kubernetes  # Bersihkan instalasi sebelumnya jika ada
 get_public_ip  # Dapatkan IP publik dari sistem
 
 # Install Kubernetes di master node
