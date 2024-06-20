@@ -1,2 +1,2 @@
-chmod +x setup-master.sh
+chmod +x ./setup-master.sh
 ./setup-master.sh
