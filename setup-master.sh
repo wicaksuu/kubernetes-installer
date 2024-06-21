@@ -75,39 +75,39 @@ install_kubernetes_master() {
 
     configure_kubectl_for_non_root
 
-    kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.24.0/manifests/calico.yaml || { echo "Failed to apply Calico network plugin. Exiting."; exit 1; }
+    # kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.24.0/manifests/calico.yaml || { echo "Failed to apply Calico network plugin. Exiting."; exit 1; }
 
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.4.0/aio/deploy/recommended.yaml || { echo "Failed to apply Kubernetes Dashboard. Exiting."; exit 1; }
+    # kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.4.0/aio/deploy/recommended.yaml || { echo "Failed to apply Kubernetes Dashboard. Exiting."; exit 1; }
 
-    kubectl create serviceaccount dashboard-admin-sa || { echo "Failed to create Dashboard ServiceAccount. Exiting."; exit 1; }
-    kubectl create clusterrolebinding dashboard-admin-sa --clusterrole=cluster-admin --serviceaccount=default:dashboard-admin-sa || { echo "Failed to create Dashboard ClusterRoleBinding. Exiting."; exit 1; }
+    # kubectl create serviceaccount dashboard-admin-sa || { echo "Failed to create Dashboard ServiceAccount. Exiting."; exit 1; }
+    # kubectl create clusterrolebinding dashboard-admin-sa --clusterrole=cluster-admin --serviceaccount=default:dashboard-admin-sa || { echo "Failed to create Dashboard ClusterRoleBinding. Exiting."; exit 1; }
 
     # Ubah Service Kubernetes Dashboard ke NodePort dengan HTTP
-    kubectl patch service kubernetes-dashboard -n kubernetes-dashboard -p '{
-        "spec": {
-            "type": "NodePort",
-            "ports": [
-                {
-                    "name": "http",
-                    "port": 80,
-                    "targetPort": 8443,
-                    "nodePort": 30000
-                },
-                {
-                    "name": "https",
-                    "port": 443,
-                    "targetPort": 8443,
-                    "nodePort": 30001
-                }
-            ]
-        }
-    }' || { echo "Failed to patch Kubernetes Dashboard service. Exiting."; exit 1; }
+    # kubectl patch service kubernetes-dashboard -n kubernetes-dashboard -p '{
+    #     "spec": {
+    #         "type": "NodePort",
+    #         "ports": [
+    #             {
+    #                 "name": "http",
+    #                 "port": 80,
+    #                 "targetPort": 8443,
+    #                 "nodePort": 30000
+    #             },
+    #             {
+    #                 "name": "https",
+    #                 "port": 443,
+    #                 "targetPort": 8443,
+    #                 "nodePort": 30001
+    #             }
+    #         ]
+    #     }
+    # }' || { echo "Failed to patch Kubernetes Dashboard service. Exiting."; exit 1; }
 
     echo "Kubernetes master installation completed successfully."
-    save_dashboard_token
+    # save_dashboard_token
     create_worker_join_script
     create_summary_file
-    check_dashboard_status
+    # check_dashboard_status
     echo "Rekapitulasi telah disimpan di data.txt"
 }
 
